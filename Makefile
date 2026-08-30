@@ -2,12 +2,13 @@ obj-m := mhsrc.o
 
 mhsrc-objs := SRC/main.o \
 	LIB/mh_core.o LIB/mh_rule.o LIB/mh_reg.o LIB/mh_scan.o \
-	LIB/mh_umount.o LIB/mh_ver.o \
+	LIB/mh_ver.o \
 	deps/KallRecon/lib/core.o deps/KallRecon/lib/slide.o \
 	deps/KallRecon/lib/anchor.o \
 	deps/HooKern/lib/hk.o deps/HooKern/lib/hk_ksym.o \
 	deps/HooKern/lib/hk_patch.o deps/HooKern/lib/hk_ptr.o \
 	deps/HooKern/lib/hk_kprobe.o deps/HooKern/lib/hk_kretprobe.o \
+	deps/HooKern/lib/hk_flush.o \
 	deps/Type_info/lib/port.o deps/Type_info/lib/btf.o \
 	deps/Type_info/lib/query.o deps/Type_info/lib/reg.o \
 	deps/Type_info/lib/lib.o deps/Type_info/lib/anchor.o \

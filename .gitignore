@@ -9,3 +9,5 @@ out/
 Module.symvers
 modules.order
 .sdk/
+compile_commands.json
+MountHide.code-workspace

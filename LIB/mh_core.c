@@ -17,7 +17,6 @@
 #include "mh.h"
 #include "mh_rule.h"
 #include "mh_ver.h"
-#include "mh_umount.h"
 #include "mh_reg.h"
 
 /* struct proc_mounts { ns(8) root(16) show(8) }, show offset is fixed */
@@ -159,10 +158,6 @@ int mh_init(const struct mh_cfg *cfg)
 			hk_exit();
 		return ret;
 	}
-
-	ret = mh_umount_resolve((unsigned long (*)(const char *))hk_resolve);
-	if (ret)
-		pr_info("[mh] path_umount unavailable, umount API disabled\n");
 
 	ret = mh_reg_resolve((unsigned long (*)(const char *))hk_resolve);
 	if (ret)

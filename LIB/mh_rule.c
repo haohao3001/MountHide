@@ -11,7 +11,6 @@
 #include <linux/dcache.h>
 #include <linux/errno.h>
 
-#include "mh.h"
 #include "mh_ver.h"
 
 struct mh_entry {
