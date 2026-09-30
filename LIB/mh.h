@@ -23,6 +23,7 @@ struct mh_cfg {
 };
 
 int mh_init(const struct mh_cfg *cfg);
+bool mh_is_inited(void);
 void mh_exit(void);
 
 /* reader visibility: hide list wins over allow list over defaults */

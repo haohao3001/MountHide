@@ -179,6 +179,11 @@ int mh_init(const struct mh_cfg *cfg)
 	return 0;
 }
 
+bool mh_is_inited(void)
+{
+	return inited;
+}
+
 void mh_exit(void)
 {
 	if (!inited)

@@ -53,7 +53,14 @@ static void mh_parse_uids(const char *str, int (*fn)(unsigned int))
 	}
 }
 
+static DEFINE_MUTEX(mh_cfg_lock);
 static void mh_cfg_apply(){
+	if (!mh_is_inited())
+		return;   
+	mutex_lock(&mh_cfg_lock); 
+	mh_hide_clear();
+	mh_reader_reset();
+
 	mh_parse_uids(allow_uids, mh_reader_allow_uid);
 	mh_parse_uids(hide_uids, mh_reader_hide_uid);
 	for (int i = 0; i < hide_count; i++) {
@@ -114,6 +121,8 @@ static int __init mh_src_init(void)
 		mh_exit();	/* 回滚：恢复 show 回调、清规则表、退出 hook 栈 */
 		return ret;
 	}
+
+	mh_cfg_apply();
 
 	return 0;
 }
