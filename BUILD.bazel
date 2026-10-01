@@ -1,0 +1,57 @@
+# /opt/ddk/vendor/mounthide/BUILD.bazel
+
+load("@kleaf//build/kernel/kleaf:kernel.bzl", "ddk_module", "ddk_headers")
+
+ddk_headers(
+    name = "lib_headers",
+    hdrs = glob(["LIB/*.h"]),
+    includes = ["LIB"],
+)
+
+ddk_headers(
+    name = "kallrecon_headers",
+    hdrs = glob(["deps/KallRecon/lib/*.h"]),
+    includes = ["deps/KallRecon/lib"],
+)
+
+ddk_headers(
+    name = "hookern_headers",
+    hdrs = glob(["deps/HooKern/lib/*.h"]),
+    includes = ["deps/HooKern/lib"],
+)
+
+ddk_headers(
+    name = "typeinfo_headers",
+    hdrs = glob(["deps/Type_info/lib/*.h"]),
+    includes = ["deps/Type_info/lib"],
+)
+
+ddk_module(
+    name = "mounthide",
+    srcs = glob([
+        "SRC/*.c", "SRC/*.S",
+        "LIB/*.c", "LIB/*.h", "LIB/*.S",
+        "deps/KallRecon/lib/*.c", "deps/KallRecon/lib/*.h", "deps/KallRecon/lib/*.S",
+        "deps/HooKern/lib/*.c", "deps/HooKern/lib/*.h", "deps/HooKern/lib/*.S",
+        "deps/Type_info/lib/*.c", "deps/Type_info/lib/*.h", "deps/Type_info/lib/*.S",
+    ], exclude = [
+        "deps/Type_info/lib/slide.c",
+    ]),
+    out = "mounthide.ko",
+    kernel_build = "//common:kernel_aarch64",
+    deps = [
+        ":lib_headers",
+        ":kallrecon_headers",
+        ":hookern_headers",
+        ":typeinfo_headers",
+        "//common:all_headers_aarch64",
+    ],
+    copts = [
+        "-std=gnu11",
+        "-Wno-declaration-after-statement",
+        "-Wno-unused-variable",
+        "-Wno-unused-function",
+        "-Wno-strict-prototypes",
+        "-DCONFIG_TI_REMAP",
+    ],
+)

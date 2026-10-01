@@ -1,6 +1,6 @@
-obj-m := mhsrc.o
+obj-m := mounthide.o
 
-mhsrc-objs := SRC/main.o \
+mounthide-objs := SRC/main.o \
 	LIB/mh_core.o LIB/mh_rule.o LIB/mh_reg.o LIB/mh_scan.o \
 	LIB/mh_ver.o \
 	deps/KallRecon/lib/core.o deps/KallRecon/lib/slide.o \
