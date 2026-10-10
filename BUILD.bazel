@@ -1,6 +1,6 @@
 # /opt/ddk/vendor/mounthide/BUILD.bazel
 
-load("@kleaf//build/kernel/kleaf:kernel.bzl", "ddk_module", "ddk_headers")
+load("@kleaf//build/kernel/kleaf:kernel.bzl", "ddk_module", "ddk_headers", "kernel_compile_commands")
 
 ddk_headers(
     name = "lib_headers",
@@ -54,4 +54,9 @@ ddk_module(
         "-Wno-strict-prototypes",
         "-DCONFIG_TI_REMAP",
     ],
+)
+
+kernel_compile_commands(
+    name = "mounthide_compdb",
+    deps = [":mounthide"],
 )

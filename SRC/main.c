@@ -17,6 +17,8 @@
 #define MH_GATE_ALLOW_MAX 16
 #define MH_GATE_UMOUNT_FLAGS (MNT_DETACH)
 
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+
 char *hide_mounts[64] = { "/debug_ramdisk" };
 int hide_count = 1;
 MODULE_PARM_DESC(hide_mounts, "mountpoints to hide from non root readers");
@@ -32,20 +34,18 @@ MODULE_PARM_DESC(allow_uids, "comma separated uids that always see the mounts");
 char *hide_uids = "";
 MODULE_PARM_DESC(hide_uids, "comma separated uids that never see the mounts");
 
-<<<<<<< HEAD
+/* HEAD：写 restart=1 触发规则重新应用 */
 unsigned int restart = 0;
 MODULE_PARM_DESC(restart, "apply rules");
-=======
+
+/* upstream：umount gate 参数 */
 char *umount_uids = "";
-module_param(umount_uids, charp, 0444);
 MODULE_PARM_DESC(umount_uids, "comma separated uids the gate may umount for");
 
 bool umount_gate;
-module_param(umount_gate, bool, 0444);
 MODULE_PARM_DESC(umount_gate, "arm the umount gate, requires a zygote domain sid");
 
 bool nuke_ext4 = true;
-module_param(nuke_ext4, bool, 0444);
 MODULE_PARM_DESC(nuke_ext4, "drop the ext4 sysfs entries of the hidden mounts");
 
 static kuid_t gate_uids[MH_GATE_ALLOW_MAX];
@@ -60,6 +60,7 @@ static bool mh_src_domain_check(const struct cred *cred)
 
 static bool mh_src_should_umount(uid_t uid)
 {
+	(void)uid;
 	return false;
 }
 
@@ -69,7 +70,6 @@ static struct mh_umount_cfg gate_cfg = {
 	.allow_uids = gate_uids,
 	.allow_n = 0,
 };
->>>>>>> upstream/master
 
 static void mh_parse_uids(const char *str, int (*fn)(unsigned int))
 {
@@ -92,29 +92,43 @@ static void mh_parse_uids(const char *str, int (*fn)(unsigned int))
 	}
 }
 
-<<<<<<< HEAD
+/* ===== HEAD 侧：restart / mh_cfg_apply ===== */
+
 static DEFINE_MUTEX(mh_cfg_lock);
-static void mh_cfg_apply(){
+
+static void mh_cfg_apply(void)
+{
 	if (!mh_is_inited())
-		return;   
-	mutex_lock(&mh_cfg_lock); 
+		return;
+
+	mutex_lock(&mh_cfg_lock);
+
 	mh_hide_clear();
 	mh_reader_reset();
 
 	mh_parse_uids(allow_uids, mh_reader_allow_uid);
 	mh_parse_uids(hide_uids, mh_reader_hide_uid);
+
 	for (int i = 0; i < hide_count; i++) {
-		int ret = mh_hide_path(hide_mounts[i]);
+		int ret;
+
+		if (!hide_mounts[i])
+			continue;
+		ret = mh_hide_path(hide_mounts[i]);
 		pr_info("[mhsrc] hide %s -> %d\n", hide_mounts[i], ret);
 	}
 
 	if (scan_feature && *scan_feature) {
 		int ret = mh_hide_scan(scan_feature);
+
 		pr_info("[mhsrc] scan %s -> %d\n", scan_feature, ret);
 	}
+
+	mutex_unlock(&mh_cfg_lock);
 }
 
-static int mh_restart(const char *val, const struct kernel_param *kp){
+static int mh_restart(const char *val, const struct kernel_param *kp)
+{
 	bool on;
 
 	if (kstrtobool(val, &on))
@@ -125,11 +139,12 @@ static int mh_restart(const char *val, const struct kernel_param *kp){
 }
 
 static const struct kernel_param_ops mh_restart_ops = {
-    .set = mh_restart,
-    .get = param_get_uint,   /* 读侧：复用标准实现（返回 0）*/
+	.set = mh_restart,
+	.get = param_get_uint,	/* 读侧：复用标准实现（返回 0）*/
 };
 
-=======
+/* ===== upstream 侧：umount gate ===== */
+
 static void mh_parse_gate_uids(const char *str)
 {
 	char buf[128];
@@ -156,14 +171,25 @@ static void mh_parse_gate_uids(const char *str)
 
 static int mh_src_gate_setup(void)
 {
+	struct cred *cred;
 	int ret;
 
-	/* init_cred is the only cred that is valid before the first fork */
-	ret = mh_umount_set_cred(&init_cred);
+	/* 第一次 fork 之前，init_cred 是唯一有效的 cred；
+	 * 但 init_cred 未导出，用 prepare_kernel_cred(NULL) 复制一份等价的。 */
+	cred = prepare_kernel_cred(NULL);
+	if (!cred) {
+		pr_err("[mhsrc] prepare_kernel_cred failed\n");
+		return -ENOMEM;
+	}
+
+	ret = mh_umount_set_cred(cred);
 	if (ret) {
 		pr_err("[mhsrc] gate cred failed %d\n", ret);
+		put_cred(cred);	/* 失败时释放新建的 cred */
 		return ret;
 	}
+	/* 若 mh_umount_set_cred 内部未接管引用，需在此 put_cred(cred)；
+	 * 若接管了，请在其释放路径里 put_cred。请按实现确认。 */
 
 	ret = mh_umount_capture_sid();
 	if (ret) {
@@ -182,7 +208,8 @@ static int mh_src_gate_setup(void)
 	return 0;
 }
 
->>>>>>> upstream/master
+/* ===== 初始化 / 退出 ===== */
+
 static unsigned long __nocfi kr_name_to_addr(const char *name)
 {
 	if (kallrecon_klp)
@@ -216,14 +243,7 @@ static int __init mh_src_init(void)
 		return ret;
 	}
 
-	mh_cfg_apply();
-
-<<<<<<< HEAD
-=======
-	if (scan_feature && *scan_feature) {
-		ret = mh_hide_scan(scan_feature);
-		pr_info("[mhsrc] scan %s -> %d\n", scan_feature, ret);
-	}
+	mh_cfg_apply();	/* 内部已包含 mh_hide_scan，不要再重复调用 */
 
 	if (nuke_ext4 && mh_ext4_ready()) {
 		ret = mh_ext4_nuke_hidden();
@@ -237,7 +257,6 @@ static int __init mh_src_init(void)
 	}
 
 	pr_info("[mhsrc] loaded\n");
->>>>>>> upstream/master
 	return 0;
 }
 
@@ -254,6 +273,12 @@ module_param(scan_feature, charp, 0644);
 module_param(allow_uids, charp, 0644);
 module_param(hide_uids, charp, 0644);
 module_param_cb(restart, &mh_restart_ops, &restart, 0200);
+/*
+看起来Dere3046还没写完umount，因此这里默认umount不可用，不创建param
+module_param(umount_uids, charp, 0444);
+module_param(umount_gate, bool, 0444);
+module_param(nuke_ext4, bool, 0444);
+*/
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Mount hiding consumer demo for PrivIsolated");
