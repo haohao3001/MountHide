@@ -10,13 +10,15 @@
 #include <linux/string.h>
 #include <linux/dcache.h>
 #include <linux/errno.h>
+#include <linux/fs.h>
 
 #include "mh_ver.h"
 
 struct mh_entry {
-	struct list_head list;
-	struct dentry *dentry; /* mountpoint dentry, matching key */
-	char *path;            /* for umount */
+    struct list_head list;
+    dev_t dev;      /* mountpoint dentry 所在 sb 的设备号 */
+    ino_t ino;      /* mountpoint dentry 的 inode 号 */
+    char *path;     /* for umount */
 };
 
 static LIST_HEAD(mh_entries);
@@ -35,42 +37,44 @@ static struct mh_entry *mh_entry_find(const char *path)
 
 int mh_rule_add(const char *path, struct dentry *dentry)
 {
-	struct mh_entry *e;
-	unsigned long flags;
+    struct mh_entry *e;
+    struct inode *in;
+    unsigned long flags;
 
-	if (!path || !dentry)
-		return -EINVAL;
+    if (!path || !dentry)
+        return -EINVAL;
+    in = d_inode(dentry);
+    if (!in)
+        return -ENOENT;   /* mountpoint 理论上必有 inode，防御性处理 */
 
-	spin_lock_irqsave(&mh_lock, flags);
-	e = mh_entry_find(path);
-	if (e) {
-		spin_unlock_irqrestore(&mh_lock, flags);
-		return 0;
-	}
-	spin_unlock_irqrestore(&mh_lock, flags);
+    /* 与原有查重逻辑一致 */
+    spin_lock_irqsave(&mh_lock, flags);
+    e = mh_entry_find(path);
+    spin_unlock_irqrestore(&mh_lock, flags);
+    if (e)
+        return 0;
 
-	e = kzalloc(sizeof(*e), GFP_KERNEL);
-	if (!e)
-		return -ENOMEM;
-	e->path = kstrdup(path, GFP_KERNEL);
-	if (!e->path) {
-		kfree(e);
-		return -ENOMEM;
-	}
-	e->dentry = dget(dentry);
+    e = kzalloc(sizeof(*e), GFP_KERNEL);
+    if (!e)
+        return -ENOMEM;
+    e->path = kstrdup(path, GFP_KERNEL);
+    if (!e->path) {
+        kfree(e);
+        return -ENOMEM;
+    }
+    e->dev = dentry->d_sb->s_dev;   /* 不增加任何引用 */
+    e->ino = in->i_ino;
 
-	spin_lock_irqsave(&mh_lock, flags);
-	if (mh_entry_find(path)) {
-		spin_unlock_irqrestore(&mh_lock, flags);
-		dput(e->dentry);
-		kfree(e->path);
-		kfree(e);
-		return 0;
-	}
-	list_add_tail(&e->list, &mh_entries);
-	spin_unlock_irqrestore(&mh_lock, flags);
-
-	return 0;
+    spin_lock_irqsave(&mh_lock, flags);
+    if (mh_entry_find(path)) {
+        spin_unlock_irqrestore(&mh_lock, flags);
+        kfree(e->path);
+        kfree(e);
+        return 0;
+    }
+    list_add_tail(&e->list, &mh_entries);
+    spin_unlock_irqrestore(&mh_lock, flags);
+    return 0;
 }
 
 int mh_rule_del(const char *path)
@@ -87,7 +91,6 @@ int mh_rule_del(const char *path)
 	list_del(&e->list);
 	spin_unlock_irqrestore(&mh_lock, flags);
 
-	dput(e->dentry);
 	kfree(e->path);
 	kfree(e);
 	return 0;
@@ -95,17 +98,16 @@ int mh_rule_del(const char *path)
 
 void mh_rule_clear(void)
 {
-	struct mh_entry *e, *tmp;
-	unsigned long flags;
+    struct mh_entry *e, *tmp;
+    unsigned long flags;
 
-	spin_lock_irqsave(&mh_lock, flags);
-	list_for_each_entry_safe (e, tmp, &mh_entries, list) {
-		list_del(&e->list);
-		dput(e->dentry);
-		kfree(e->path);
-		kfree(e);
-	}
-	spin_unlock_irqrestore(&mh_lock, flags);
+    spin_lock_irqsave(&mh_lock, flags);
+    list_for_each_entry_safe (e, tmp, &mh_entries, list) {
+        list_del(&e->list);
+        kfree(e->path);
+        kfree(e);
+    }
+    spin_unlock_irqrestore(&mh_lock, flags);
 }
 
 bool mh_rule_match(const void *mnt)
@@ -113,6 +115,7 @@ bool mh_rule_match(const void *mnt)
 	struct mh_entry *e;
 	struct mountpoint *mp;
 	struct dentry *d;
+	struct inode *in;
 	const char *base = mnt;
 	unsigned long mnt_mp = mh_off_mnt_mp();
 	unsigned long mp_dentry = mh_off_mp_dentry();
@@ -131,13 +134,17 @@ bool mh_rule_match(const void *mnt)
 	if (!d)
 		return false;
 
+	in = d_inode(d);
+    if (!in)
+        return false;
+
 	spin_lock_irqsave(&mh_lock, flags);
 	list_for_each_entry (e, &mh_entries, list) {
-		if (e->dentry == d) {
-			found = true;
-			break;
-		}
-	}
+        if (e->dev == d->d_sb->s_dev && e->ino == in->i_ino) {
+            found = true;
+            break;
+        }
+    }
 	spin_unlock_irqrestore(&mh_lock, flags);
 
 	return found;
